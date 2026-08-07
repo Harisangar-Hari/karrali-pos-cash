@@ -52,7 +52,7 @@ export default function POSPage() {
     increaseQty,
     decreaseQty,
     clearCart,
-    getTotal,
+
     updateItem,
   } = useCartStore();
 
@@ -213,6 +213,8 @@ export default function POSPage() {
       const totalItemDiscounts = items.reduce((acc, i) => {
         return acc + (((i?.discount ?? 0) * (i?.quantity ?? 0)));
       }, 0);
+
+      console.log("totalItemDiscounts :", totalItemDiscounts);
 
       const finalTotal = total || 0;
       const invoiceDiscount = invoiceDiscountAmount || 0;

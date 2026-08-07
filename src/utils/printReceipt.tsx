@@ -52,8 +52,6 @@ function imageToBase64(src: string): Promise<string> {
 }
 
 // ── Step 2: build the full HTML string ──────────────────────────────────────
-// PrintReceipt.ts - Updated buildHTML function with subtotal fix
-
 function buildHTML(data: ReceiptData, logoB64: string): string {
   const now = new Date().toLocaleString("en-GB", {
     day: "2-digit",
@@ -76,13 +74,13 @@ function buildHTML(data: ReceiptData, logoB64: string): string {
     subtotal += i.price * i.quantity;
     totalItemDiscount += discount * i.quantity;
 
-    // Show discount per item with strikethrough
+    // Show discount per item with strikethrough - LARGER FONT
     const discountDisplay = discount > 0
-      ? `<span style="text-decoration: line-through; color: #999; font-size: 9px;">Rs ${i.price.toFixed(2)}</span> 
-         <span style="color: #d32f2f; font-size: 9px;">(-${discount.toFixed(2)})</span>`
-      : `<span style="font-size: 9px;">Rs ${i.price.toFixed(2)}</span>`;
+      ? `<span style="text-decoration: line-through; color: #999; font-size: 11px;">Rs ${i.price.toFixed(2)}</span> 
+         <span style="color: #d32f2f; font-size: 11px; font-weight: bold;">(-${discount.toFixed(2)})</span>`
+      : `<span style="font-size: 11px;">Rs ${i.price.toFixed(2)}</span>`;
 
-    // Item separator line (except for first item)
+    // Item separator line
     const separator = index > 0 ? `<tr><td colspan="2" class="item-separator">- - - - - - - - - - - - - - - -</td></tr>` : '';
 
     return `
@@ -97,28 +95,22 @@ function buildHTML(data: ReceiptData, logoB64: string): string {
     `;
   }).join("");
 
-  // ✅ FIXED: Always use the provided subtotal or calculated one
   const displaySubtotal = data.subtotal ?? subtotal;
   const displayInvoiceDiscount = data.invoiceDiscount ?? 0;
-
-  // Total discount (item discounts + invoice discount)
   const totalDiscount = totalItemDiscount + displayInvoiceDiscount;
 
-  // Payment mode display
   const paymentModeDisplay = {
     cash: "Cash",
     card: "Card",
     credit: "Credit"
   }[data.paymentMode] || data.paymentMode;
 
-  // Payment row
   const paymentRow = data.paymentMode === "cash" || data.paymentMode === "card"
     ? `<tr><td class="sum-label">Change</td><td class="sum-amount">${(data.change ?? 0).toFixed(2)}</td></tr>`
     : `<tr><td class="sum-label">Balance Due</td><td class="sum-amount">${(data.balance ?? 0).toFixed(2)}</td></tr>`;
 
-  // Payment reference
   const paymentRefRow = data.paymentReference
-    ? `<tr><td class="sum-label">Ref</td><td class="sum-amount" style="font-size:10px;">${data.paymentReference}</td></tr>`
+    ? `<tr><td class="sum-label">Ref</td><td class="sum-amount" style="font-size:11px;">${data.paymentReference}</td></tr>`
     : "";
 
   return `<!DOCTYPE html>
@@ -138,8 +130,8 @@ function buildHTML(data: ReceiptData, logoB64: string): string {
   html, body {
     width: 72mm;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 11px;
-    line-height: 1.4;
+    font-size: 13px;
+    line-height: 1.5;
     color: #000 !important;
     background: #fff !important;
     -webkit-print-color-adjust: exact !important;
@@ -165,20 +157,22 @@ function buildHTML(data: ReceiptData, logoB64: string): string {
   }
 
   .shop-name {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
     letter-spacing: 1px;
   }
   
   .shop-address {
-    font-size: 9px;
-    line-height: 1.3;
+    font-size: 11px;
+    line-height: 1.4;
     color: #333;
+    font-weight: 500;
   }
 
   .meta {
-    font-size: 10px;
-    line-height: 1.5;
+    font-size: 12px;
+    line-height: 1.6;
+    font-weight: 500;
   }
 
   .meta-label {
@@ -192,14 +186,14 @@ function buildHTML(data: ReceiptData, logoB64: string): string {
     width: 100%;
     border: none;
     border-top: 1px dashed #000;
-    margin: 4px 0;
+    margin: 5px 0;
   }
 
   .div-double {
     width: 100%;
     border: none;
     border-top: 2px solid #000;
-    margin: 4px 0;
+    margin: 5px 0;
   }
 
   /* ── Items table ── */
@@ -210,103 +204,110 @@ function buildHTML(data: ReceiptData, logoB64: string): string {
   }
 
   td { 
-    padding: 1px 0; 
-    font-size: 11px; 
+    padding: 2px 0; 
+    font-size: 13px; 
     vertical-align: top;
   }
 
   .item-name { 
-    font-size: 11px; 
-    font-weight: 500;
-    padding-top: 3px;
-    padding-bottom: 0px;
+    font-size: 13px; 
+    font-weight: bold;
+    padding-top: 4px;
+    padding-bottom: 1px;
   }
   
   .item-separator {
-    font-size: 8px;
+    font-size: 10px;
     color: #ccc;
     text-align: center;
-    padding: 2px 0;
+    padding: 3px 0;
     letter-spacing: 1px;
   }
 
   .qty { 
     width: 58%; 
-    font-size: 10px; 
+    font-size: 12px; 
     padding-left: 4px;
-    padding-bottom: 3px;
+    padding-bottom: 4px;
+    font-weight: 500;
   }
   
   .amount { 
     width: 42%; 
     text-align: right; 
-    font-size: 10px;
-    font-weight: 500;
-    padding-bottom: 3px;
+    font-size: 12px;
+    font-weight: bold;
+    padding-bottom: 4px;
   }
 
   /* ── Summary rows ── */
   .sum-label { 
     width: 55%; 
-    font-size: 11px;
+    font-size: 13px;
+    font-weight: 600;
   }
   
   .sum-amount { 
     width: 45%; 
     text-align: right; 
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: bold;
   }
 
   .total-row td {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
-    padding-top: 4px;
-    padding-bottom: 2px;
+    padding-top: 5px;
+    padding-bottom: 3px;
   }
   
   .discount-row td {
-    font-size: 11px;
+    font-size: 13px;
     color: #d32f2f;
     font-weight: bold;
-    padding-top: 2px;
+    padding-top: 3px;
   }
 
   .subtotal-row td {
-    font-size: 11px;
+    font-size: 13px;
     color: #666;
-    padding-top: 2px;
+    font-weight: 600;
+    padding-top: 3px;
   }
 
   .payment-mode-row td {
-    font-size: 10px;
+    font-size: 12px;
     color: #333;
-    padding-top: 2px;
+    padding-top: 3px;
+    font-weight: 500;
   }
 
   /* ── FOOTER: CENTER ALIGNED ── */
   .footer {
     text-align: center;
-    font-size: 10px;
-    margin-top: 3px;
+    font-size: 12px;
+    margin-top: 4px;
+    font-weight: 500;
   }
   
   .footer-brand { 
     margin-top: 6px; 
-    font-size: 8px; 
+    font-size: 10px; 
     color: #666;
+    font-weight: 500;
   }
   
   .footer-thanks {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: bold;
-    margin-top: 4px;
+    margin-top: 5px;
   }
 
   .footer-no-return {
-    font-size: 9px;
+    font-size: 11px;
     color: #666;
-    margin-top: 2px;
+    margin-top: 3px;
+    font-weight: 600;
   }
 
   /* ── Print-specific ── */
@@ -350,46 +351,40 @@ function buildHTML(data: ReceiptData, logoB64: string): string {
 
   <!-- SUMMARY -->
   <table>
-  <tbody>
-    <!-- ✅ Subtotal row - should ALWAYS show -->
-    <tr class="subtotal-row">
-      <td class="sum-label">Subtotal</td>
-      <td class="sum-amount">${displaySubtotal.toFixed(2)}</td>
-    </tr>
-    
-   
-    
-    <!-- Invoice Discount -->
-    ${displayInvoiceDiscount > 0 ? `
-    <tr class="discount-row">
-      <td class="sum-label">Invoice Discount</td>
-      <td class="sum-amount">-${displayInvoiceDiscount.toFixed(2)}</td>
-    </tr>
-    ` : ''}
-    
-    <!-- Total Discount -->
-    ${totalDiscount > 0 ? `
-    <tr class="discount-row">
-      <td class="sum-label">Total Discount</td>
-      <td class="sum-amount">-${totalDiscount.toFixed(2)}</td>
-    </tr>
-    ` : ''}
-    
-    <!-- TOTAL -->
-    <tr class="total-row">
-      <td class="sum-label">TOTAL</td>
-      <td class="sum-amount">${data.total.toFixed(2)}</td>
-    </tr>
-    
-    <tr>
-      <td class="sum-label">Paid</td>
-      <td class="sum-amount">${data.paid.toFixed(2)}</td>
-    </tr>
-    
-    ${paymentRow}
-    ${paymentRefRow}
-  </tbody>
-</table>
+    <tbody>
+      <tr class="subtotal-row">
+        <td class="sum-label">Subtotal</td>
+        <td class="sum-amount">${displaySubtotal.toFixed(2)}</td>
+      </tr>
+      
+      ${displayInvoiceDiscount > 0 ? `
+      <tr class="discount-row">
+        <td class="sum-label">Invoice Discount</td>
+        <td class="sum-amount">-${displayInvoiceDiscount.toFixed(2)}</td>
+      </tr>
+      ` : ''}
+      
+      ${totalDiscount > 0 ? `
+      <tr class="discount-row">
+        <td class="sum-label">Total Discount</td>
+        <td class="sum-amount">-${totalDiscount.toFixed(2)}</td>
+      </tr>
+      ` : ''}
+      
+      <tr class="total-row">
+        <td class="sum-label">TOTAL</td>
+        <td class="sum-amount">${data.total.toFixed(2)}</td>
+      </tr>
+      
+      <tr>
+        <td class="sum-label">Paid</td>
+        <td class="sum-amount">${data.paid.toFixed(2)}</td>
+      </tr>
+      
+      ${paymentRow}
+      ${paymentRefRow}
+    </tbody>
+  </table>
 
   <hr class="div">
 

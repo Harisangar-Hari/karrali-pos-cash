@@ -27,14 +27,14 @@ export default function CustomerSelectModal({ onClose, onSelect }: Props) {
     const handleCreate = async () => {
         if (!name || !phone) return;
 
-        const res = await createCustomer({ name, phone });
+        const res = await createCustomer({ Name: name, Phone: phone });
         onSelect(res);
     };
 
     const filtered = customers.filter(
         c =>
-            c.name.toLowerCase().includes(search.toLowerCase()) ||
-            c.phone.includes(search)
+            c.Name.toLowerCase().includes(search.toLowerCase()) ||
+            c.Phone.includes(search)
     );
 
     return (

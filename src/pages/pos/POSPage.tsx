@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { getProductByBarcode, checkoutSale } from "../../api/posApi";
-import { getProducts } from "../../api/productApi";
+import { checkoutSale } from "../../api/posApi";
+import { getProducts, getProductByBarcode, } from "../../api/productApi";
 import { useCartStore } from "../../store/cartStore";
 import { useToast } from "../../store/toastStore";
 import { useBeep } from "../../hooks/useBeep";
@@ -40,7 +40,7 @@ export default function POSPage() {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [invoiceDiscountPercent, setInvoiceDiscountPercent] = useState<number>(0);
-  const [isProcessing, setIsProcessing] = useState(false); // 👈 NEW: Loading state
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const barcodeRef = useRef<HTMLInputElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -58,17 +58,19 @@ export default function POSPage() {
 
   const { showToast } = useToast();
   const { beep } = useBeep();
-  console.log(getTotal());
 
   // Load customers on page load
   useEffect(() => {
     loadCustomers();
   }, []);
 
-  // Calculate totals
+  // ✅ FIXED: Add null-safety to all calculations
   const subTotalAfterItemDiscount = items.reduce((acc, i) => {
-    const itemPrice = i.price * i.quantity;
-    const itemDisc = (i.discount || 0) * i.quantity;
+    const price = i?.price ?? 0;
+    const quantity = i?.quantity ?? 0;
+    const discount = i?.discount ?? 0;
+    const itemPrice = price * quantity;
+    const itemDisc = discount * quantity;
     return acc + (itemPrice - itemDisc);
   }, 0);
 
@@ -103,14 +105,18 @@ export default function POSPage() {
         setResults([]);
         return;
       }
-      const data = await getProducts();
-      const filtered = data.filter(
-        (p: Product) =>
-          p.name.toLowerCase().includes(search.toLowerCase()) ||
-          p.barcode.includes(search)
-      );
-      setResults(filtered);
-      setShowResults(true);
+      try {
+        const data = await getProducts();
+        const filtered = data.filter(
+          (p: Product) =>
+            p.name.toLowerCase().includes(search.toLowerCase()) ||
+            p.barcode.includes(search)
+        );
+        setResults(filtered);
+        setShowResults(true);
+      } catch {
+        setResults([]);
+      }
     }, 300);
     return () => clearTimeout(delay);
   }, [search]);
@@ -121,11 +127,11 @@ export default function POSPage() {
       const product = await getProductByBarcode(barcode);
       addItem({
         id: product.id,
-        name: product.name,
-        barcode: product.barcode,
-        price: product.price,
+        name: product.name || "Unknown",
+        barcode: product.barcode || "",
+        price: product.price ?? 0,
         quantity: 1,
-        discount: 0,
+        discount: product.discount || 0,
       });
       beep();
       setBarcode("");
@@ -135,9 +141,6 @@ export default function POSPage() {
     }
   };
 
-  // ============================
-  // UPDATED HANDLE CHECKOUT
-  // ============================
   const handleCheckout = async () => {
     if (items.length === 0) {
       showToast("Cart is empty", "error");
@@ -161,7 +164,7 @@ export default function POSPage() {
       let payload: any = {
         items: items.map((i) => ({
           productId: i.id,
-          quantity: i.quantity,
+          quantity: i.quantity || 0,
           discount: i.discount || 0,
         })),
         paidAmount: paymentMode === "credit" ? paidAmount : cash,
@@ -202,50 +205,33 @@ export default function POSPage() {
 
       showToast("Checkout successful", "success");
 
-      // ✅ Calculate correct values for receipt
-
-      // 1. Original Subtotal (sum of original prices BEFORE any discounts)
+      // ✅ Calculate correct values for receipt with null-safety
       const originalSubtotal = items.reduce((acc, i) => {
-        return acc + (i.price * i.quantity);
+        return acc + ((i?.price ?? 0) * (i?.quantity ?? 0));
       }, 0);
 
-      // 2. Total Item Discounts (sum of all item-level discounts)
       const totalItemDiscounts = items.reduce((acc, i) => {
-        return acc + ((i.discount || 0) * i.quantity);
+        return acc + (((i?.discount ?? 0) * (i?.quantity ?? 0)));
       }, 0);
 
-      // 3. Final Total (already calculated in your component as 'total')
       const finalTotal = total || 0;
-
-      // 4. Invoice Discount (already calculated)
       const invoiceDiscount = invoiceDiscountAmount || 0;
 
-      // Safe values for payment
       const safePaid = paymentMode === "credit" ? (paidAmount || 0) : (cash || 0);
       const safeChange = paymentMode === "cash" ? Math.max(0, (cash || 0) - finalTotal) : 0;
       const safeBalance = paymentMode === "credit" ? (balance || 0) : 0;
 
-      // ✅ Debug log to verify calculations
-      console.log('Receipt Calculations:', {
-        originalSubtotal,
-        totalItemDiscounts,
-        invoiceDiscount,
-        finalTotal,
-        'Should match': originalSubtotal - totalItemDiscounts - invoiceDiscount === finalTotal
-      });
-
-      // ✅ Print receipt with correct values
       printReceipt({
         invoiceNumber: res?.InvoiceNumber,
         items: items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price,
+          name: i.name || "Product",
+          quantity: i.quantity || 0,
+          price: i.price || 0,
           discount: i.discount || 0,
         })),
-        subtotal: originalSubtotal,        // ✅ Original subtotal BEFORE discounts
-        total: finalTotal,                 // ✅ Final total AFTER all discounts
-        invoiceDiscount: invoiceDiscount,  // ✅ Invoice-level discount
+        subtotal: originalSubtotal,
+        total: finalTotal,
+        invoiceDiscount: invoiceDiscount,
         paid: safePaid,
         change: safeChange,
         balance: safeBalance,
@@ -293,8 +279,6 @@ export default function POSPage() {
 
       setCustomers((prev) => [...prev, data]);
       setSelectedCustomerId(data.id);
-
-      // Auto-fill name and phone for receipt
       setCustomerNameInput(data.name);
       setCustomerPhoneInput(data.phone);
 
@@ -312,9 +296,8 @@ export default function POSPage() {
     <div className="min-h-screen bg-gray-100 p-4 md:p-6 font-sans text-gray-900">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 max-w-[1400px] mx-auto">
 
-        {/* LEFT COLUMN - Keep same as before */}
+        {/* LEFT COLUMN */}
         <div className="lg:col-span-7 flex flex-col gap-4">
-          {/* Scan and Search sections - unchanged */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* SCAN */}
             <div className="bg-white border border-gray-300 rounded-sm shadow-sm p-4">
@@ -364,9 +347,9 @@ export default function POSPage() {
                       onClick={() => {
                         addItem({
                           id: p.id,
-                          name: p.name,
-                          barcode: p.barcode,
-                          price: p.price,
+                          name: p.name || "Unknown",
+                          barcode: p.barcode || "",
+                          price: p.price ?? 0,
                           quantity: 1,
                           discount: p.discount || 0,
                         });
@@ -379,20 +362,20 @@ export default function POSPage() {
                       className="flex items-center justify-between px-4 py-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors"
                     >
                       <div className="flex-1 pr-4">
-                        <p className="font-semibold text-gray-800 text-sm">{p.name}</p>
+                        <p className="font-semibold text-gray-800 text-sm">{p.name || "Unknown"}</p>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px]">
-                          <span className="flex items-center gap-1 text-gray-400"><span className="font-mono">#{p.barcode}</span></span>
+                          <span className="flex items-center gap-1 text-gray-400"><span className="font-mono">#{p.barcode || "N/A"}</span></span>
                           <span className="w-px h-3 bg-gray-300"></span>
-                          <span className="text-gray-500">Stock: <span className="font-medium text-gray-700">{p.stockQty}</span></span>
+                          <span className="text-gray-500">Stock: <span className="font-medium text-gray-700">{p.stockQty ?? 0}</span></span>
                           {(p.warrantyMonths ?? 0) > 0 && (<><span className="w-px h-3 bg-gray-300"></span><span className="text-gray-500">Warranty: <span className="font-medium text-gray-700">{p.warrantyMonths}m</span></span></>)}
                           {p.brand && (<><span className="w-px h-3 bg-gray-300"></span><span className="flex items-center gap-1 text-gray-500">Brand: <span className="font-medium text-gray-700">{p.brand.name}</span></span></>)}
                         </div>
                       </div>
                       <div className="flex flex-col items-end shrink-0">
-                        <span className="font-mono font-bold text-[#0B6E4F] text-sm">Rs {p.price.toFixed(2)}</span>
+                        <span className="font-mono font-bold text-[#0B6E4F] text-sm">Rs {(p.price ?? 0).toFixed(2)}</span>
                         {(p.discount ?? 0) > 0 && (
                           <span className="text-[10px] font-medium text-gray-500 mt-0.5">
-                            Ref Disc: -Rs {p.discount?.toFixed(2)}
+                            Ref Disc: -Rs {(p.discount ?? 0).toFixed(2)}
                           </span>
                         )}
                       </div>
@@ -403,7 +386,7 @@ export default function POSPage() {
             </div>
           </div>
 
-          {/* CART - Keep same */}
+          {/* CART */}
           <div className="bg-white border border-gray-300 rounded-sm shadow-sm flex-1 flex flex-col min-h-[400px]">
             <div className="px-4 py-3 border-b border-gray-300 flex items-center justify-between bg-gray-50">
               <h2 className="text-xs font-bold tracking-wider text-gray-600 uppercase">Current Sale</h2>
@@ -430,17 +413,22 @@ export default function POSPage() {
                   </thead>
                   <tbody>
                     {items.map((i) => {
-                      const lineTotal = (i.price * i.quantity) - ((i.discount || 0) * i.quantity);
+                      // ✅ FIXED: Add null-safety
+                      const price = i?.price ?? 0;
+                      const quantity = i?.quantity ?? 0;
+                      const discount = i?.discount ?? 0;
+                      const lineTotal = (price * quantity) - (discount * quantity);
+
                       return (
                         <tr key={i.id} className="border-b border-gray-100 last:border-0 group hover:bg-gray-50">
                           <td className="py-3 pr-2">
                             <div className="flex flex-col">
-                              <p className="font-semibold text-gray-800">{i.name}</p>
+                              <p className="font-semibold text-gray-800">{i.name || "Unknown"}</p>
                               <div className="flex flex-wrap items-center gap-x-2 text-xs text-gray-500 mt-0.5">
-                                <span>Rs {i.price.toFixed(2)} each</span>
-                                {(i.discount || 0) > 0 && (
+                                <span>Rs {price.toFixed(2)} each</span>
+                                {discount > 0 && (
                                   <span className="text-red-500 font-medium">
-                                    (Disc: -Rs {(i.discount || 0).toFixed(2)})
+                                    (Disc: -Rs {discount.toFixed(2)})
                                   </span>
                                 )}
                               </div>
@@ -449,7 +437,7 @@ export default function POSPage() {
                           <td className="py-3 px-2 align-middle">
                             <div className="flex items-center justify-center gap-1 border border-gray-300 rounded-sm bg-white overflow-hidden w-fit mx-auto">
                               <button onClick={() => decreaseQty(i.id)} className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">−</button>
-                              <span className="w-8 text-center font-mono font-bold text-sm">{i.quantity}</span>
+                              <span className="w-8 text-center font-mono font-bold text-sm">{quantity}</span>
                               <button onClick={() => increaseQty(i.id)} className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">+</button>
                             </div>
                           </td>
@@ -457,7 +445,7 @@ export default function POSPage() {
                             <input
                               type="number"
                               min="0"
-                              value={i.discount || 0}
+                              value={discount}
                               onChange={(e) => {
                                 const val = Number(e.target.value);
                                 if (updateItem) {
@@ -497,11 +485,11 @@ export default function POSPage() {
             <div className="absolute top-0 left-0 w-full h-1 bg-[#4ADE9A]"></div>
             <p className="text-xs font-bold tracking-widest uppercase text-gray-400">Total Due</p>
             <p className="mt-2 font-mono text-4xl md:text-5xl font-bold tabular-nums text-[#4ADE9A] tracking-tight">
-              Rs {total.toFixed(2)}
+              Rs {(total || 0).toFixed(2)}
             </p>
           </div>
 
-          {/* Payment Details */}
+          {/* Payment Details - Same as before, just ensure null-safety */}
           <div className="bg-white border border-gray-300 rounded-sm shadow-sm flex flex-col flex-1">
             <div className="px-4 py-3 border-b border-gray-300 bg-gray-50">
               <h2 className="text-xs font-bold tracking-wider text-gray-600 uppercase">Payment Details</h2>
@@ -554,7 +542,7 @@ export default function POSPage() {
                   />
                   {invoiceDiscountPercent > 0 && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-[#0B6E4F] bg-green-50 px-2 py-0.5 rounded-full">
-                      - Rs {invoiceDiscountAmount.toFixed(2)}
+                      - Rs {(invoiceDiscountAmount || 0).toFixed(2)}
                     </div>
                   )}
                 </div>
@@ -646,7 +634,7 @@ export default function POSPage() {
                   <div className="flex justify-between items-center bg-gray-50 border border-gray-200 p-3 rounded-sm">
                     <span className="text-gray-600 uppercase tracking-widest text-xs font-bold">Change Due</span>
                     <span className={`font-mono font-bold text-xl ${change >= 0 ? "text-[#0B6E4F]" : "text-red-600"}`}>
-                      Rs {Math.max(0, change).toFixed(2)}
+                      Rs {(Math.max(0, change) || 0).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -701,14 +689,14 @@ export default function POSPage() {
                   <div className="flex justify-between items-center bg-gray-50 border border-gray-200 p-3 rounded-sm">
                     <span className="text-gray-600 uppercase tracking-widest text-xs font-bold">Remaining Balance</span>
                     <span className={`font-mono font-bold text-xl ${balance > 0 ? "text-red-600" : "text-gray-900"}`}>
-                      Rs {Math.max(0, balance).toFixed(2)}
+                      Rs {(Math.max(0, balance) || 0).toFixed(2)}
                     </span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* CHECKOUT BUTTON - Updated with loading state */}
+            {/* CHECKOUT BUTTON */}
             <div className="p-4 border-t border-gray-300 bg-gray-50">
               <button
                 onClick={handleCheckout}

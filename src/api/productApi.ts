@@ -7,11 +7,11 @@ export interface Product {
   sku: string;
   price: number;
   costPrice: number;
+  discount?: number; // ✅ Make sure this is optional
   stockQty: number;
   reorderLevel: number;
   categoryId: string;
   isActive: boolean;
-  // New Fields
   warrantyMonths?: number;
   brand?: {
     id: string;
@@ -39,7 +39,6 @@ export const getProducts = async (): Promise<Product[]> => {
     reorderLevel: p.ReorderLevel ?? 0,
     categoryId: p.CategoryId,
     isActive: p.IsActive,
-    // New mapped fields
     warrantyMonths: p.WarrantyMonths ?? 0,
     brand: p.Brands
       ? {
@@ -59,7 +58,6 @@ export const getProducts = async (): Promise<Product[]> => {
 // GET PRODUCT BY BARCODE (fast POS scan mode)
 export const getProductByBarcode = async (barcode: string): Promise<Product> => {
   const res = await api.get(`/products/barcode/${barcode}`);
-  // Note: You should ensure your backend returns Brands/WarrantyMonths for this endpoint too
   return {
     id: res.data.Id,
     name: res.data.Name,
@@ -67,6 +65,7 @@ export const getProductByBarcode = async (barcode: string): Promise<Product> => 
     sku: res.data.SKU,
     price: Number(res.data.Price ?? 0),
     costPrice: Number(res.data.CostPrice ?? 0),
+    discount: Number(res.data.Discount ?? 0), // ✅ ADD THIS
     stockQty: res.data.StockQty ?? 0,
     reorderLevel: res.data.ReorderLevel ?? 0,
     categoryId: res.data.CategoryId,

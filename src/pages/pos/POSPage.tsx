@@ -58,6 +58,7 @@ export default function POSPage() {
 
   const { showToast } = useToast();
   const { beep } = useBeep();
+  console.log(getTotal());
 
   // Load customers on page load
   useEffect(() => {
@@ -138,146 +139,146 @@ export default function POSPage() {
   // UPDATED HANDLE CHECKOUT
   // ============================
   const handleCheckout = async () => {
-  if (items.length === 0) {
-    showToast("Cart is empty", "error");
-    return;
-  }
+    if (items.length === 0) {
+      showToast("Cart is empty", "error");
+      return;
+    }
 
-  if (paymentMode === "cash" && cash < total) {
-    showToast("Insufficient cash", "error");
-    return;
-  }
+    if (paymentMode === "cash" && cash < total) {
+      showToast("Insufficient cash", "error");
+      return;
+    }
 
-  if (paymentMode === "credit" && !selectedCustomerId) {
-    showToast("Select customer", "error");
-    return;
-  }
+    if (paymentMode === "credit" && !selectedCustomerId) {
+      showToast("Select customer", "error");
+      return;
+    }
 
-  if (isProcessing) return;
-  setIsProcessing(true);
+    if (isProcessing) return;
+    setIsProcessing(true);
 
-  try {
-    let payload: any = {
-      items: items.map((i) => ({
-        productId: i.id,
-        quantity: i.quantity,
-        discount: i.discount || 0,
-      })),
-      paidAmount: paymentMode === "credit" ? paidAmount : cash,
-      invoiceDiscount: invoiceDiscountAmount,
-      paymentMode: paymentMode,
-    };
+    try {
+      let payload: any = {
+        items: items.map((i) => ({
+          productId: i.id,
+          quantity: i.quantity,
+          discount: i.discount || 0,
+        })),
+        paidAmount: paymentMode === "credit" ? paidAmount : cash,
+        invoiceDiscount: invoiceDiscountAmount,
+        paymentMode: paymentMode,
+      };
 
-    if (paymentMode === "credit") {
-      payload.customerId = selectedCustomerId;
-    } else {
-      if (selectedCustomerId) {
+      if (paymentMode === "credit") {
         payload.customerId = selectedCustomerId;
       } else {
-        payload.customerId = null;
-        if (customerNameInput?.trim()) {
-          payload.customerName = customerNameInput.trim();
-        }
-        if (customerPhoneInput?.trim()) {
-          payload.customerPhone = customerPhoneInput.trim();
+        if (selectedCustomerId) {
+          payload.customerId = selectedCustomerId;
+        } else {
+          payload.customerId = null;
+          if (customerNameInput?.trim()) {
+            payload.customerName = customerNameInput.trim();
+          }
+          if (customerPhoneInput?.trim()) {
+            payload.customerPhone = customerPhoneInput.trim();
+          }
         }
       }
+
+      const res = await checkoutSale(payload);
+
+      // Get customer info for receipt
+      let receiptCustomerName = "";
+      let receiptCustomerPhone = "";
+
+      if (paymentMode === "credit") {
+        const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+        receiptCustomerName = selectedCustomer?.name || res?.CustomerName || "";
+        receiptCustomerPhone = selectedCustomer?.phone || res?.CustomerPhone || "";
+      } else {
+        receiptCustomerName = res?.CustomerName || customerNameInput || "";
+        receiptCustomerPhone = res?.CustomerPhone || customerPhoneInput || "";
+      }
+
+      showToast("Checkout successful", "success");
+
+      // ✅ Calculate correct values for receipt
+
+      // 1. Original Subtotal (sum of original prices BEFORE any discounts)
+      const originalSubtotal = items.reduce((acc, i) => {
+        return acc + (i.price * i.quantity);
+      }, 0);
+
+      // 2. Total Item Discounts (sum of all item-level discounts)
+      const totalItemDiscounts = items.reduce((acc, i) => {
+        return acc + ((i.discount || 0) * i.quantity);
+      }, 0);
+
+      // 3. Final Total (already calculated in your component as 'total')
+      const finalTotal = total || 0;
+
+      // 4. Invoice Discount (already calculated)
+      const invoiceDiscount = invoiceDiscountAmount || 0;
+
+      // Safe values for payment
+      const safePaid = paymentMode === "credit" ? (paidAmount || 0) : (cash || 0);
+      const safeChange = paymentMode === "cash" ? Math.max(0, (cash || 0) - finalTotal) : 0;
+      const safeBalance = paymentMode === "credit" ? (balance || 0) : 0;
+
+      // ✅ Debug log to verify calculations
+      console.log('Receipt Calculations:', {
+        originalSubtotal,
+        totalItemDiscounts,
+        invoiceDiscount,
+        finalTotal,
+        'Should match': originalSubtotal - totalItemDiscounts - invoiceDiscount === finalTotal
+      });
+
+      // ✅ Print receipt with correct values
+      printReceipt({
+        invoiceNumber: res?.InvoiceNumber,
+        items: items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+          discount: i.discount || 0,
+        })),
+        subtotal: originalSubtotal,        // ✅ Original subtotal BEFORE discounts
+        total: finalTotal,                 // ✅ Final total AFTER all discounts
+        invoiceDiscount: invoiceDiscount,  // ✅ Invoice-level discount
+        paid: safePaid,
+        change: safeChange,
+        balance: safeBalance,
+        paymentMode: paymentMode,
+        customerName: receiptCustomerName,
+        customerPhone: receiptCustomerPhone,
+        paymentReference: res?.paymentReference || undefined,
+      });
+
+      // Reset form
+      clearCart();
+      setCash(0);
+      setPaidAmount(0);
+      setSelectedCustomerId("");
+      setPaymentMode("cash");
+      setInvoiceDiscountPercent(0);
+      setCustomerNameInput("");
+      setCustomerPhoneInput("");
+      setSearch("");
+      setResults([]);
+      setShowResults(false);
+
+      setTimeout(() => {
+        barcodeRef.current?.focus();
+      }, 100);
+
+    } catch (error: any) {
+      const message = error?.response?.data?.message || "Checkout failed";
+      showToast(message, "error");
+    } finally {
+      setIsProcessing(false);
     }
-
-    const res = await checkoutSale(payload);
-
-    // Get customer info for receipt
-    let receiptCustomerName = "";
-    let receiptCustomerPhone = "";
-
-    if (paymentMode === "credit") {
-      const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
-      receiptCustomerName = selectedCustomer?.name || res?.CustomerName || "";
-      receiptCustomerPhone = selectedCustomer?.phone || res?.CustomerPhone || "";
-    } else {
-      receiptCustomerName = res?.CustomerName || customerNameInput || "";
-      receiptCustomerPhone = res?.CustomerPhone || customerPhoneInput || "";
-    }
-
-    showToast("Checkout successful", "success");
-
-    // ✅ Calculate correct values for receipt
-    
-    // 1. Original Subtotal (sum of original prices BEFORE any discounts)
-    const originalSubtotal = items.reduce((acc, i) => {
-      return acc + (i.price * i.quantity);
-    }, 0);
-
-    // 2. Total Item Discounts (sum of all item-level discounts)
-    const totalItemDiscounts = items.reduce((acc, i) => {
-      return acc + ((i.discount || 0) * i.quantity);
-    }, 0);
-
-    // 3. Final Total (already calculated in your component as 'total')
-    const finalTotal = total || 0;
-
-    // 4. Invoice Discount (already calculated)
-    const invoiceDiscount = invoiceDiscountAmount || 0;
-
-    // Safe values for payment
-    const safePaid = paymentMode === "credit" ? (paidAmount || 0) : (cash || 0);
-    const safeChange = paymentMode === "cash" ? Math.max(0, (cash || 0) - finalTotal) : 0;
-    const safeBalance = paymentMode === "credit" ? (balance || 0) : 0;
-
-    // ✅ Debug log to verify calculations
-    console.log('Receipt Calculations:', {
-      originalSubtotal,
-      totalItemDiscounts,
-      invoiceDiscount,
-      finalTotal,
-      'Should match': originalSubtotal - totalItemDiscounts - invoiceDiscount === finalTotal
-    });
-
-    // ✅ Print receipt with correct values
-    printReceipt({
-      invoiceNumber: res?.InvoiceNumber,
-      items: items.map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        price: i.price,
-        discount: i.discount || 0,
-      })),
-      subtotal: originalSubtotal,        // ✅ Original subtotal BEFORE discounts
-      total: finalTotal,                 // ✅ Final total AFTER all discounts
-      invoiceDiscount: invoiceDiscount,  // ✅ Invoice-level discount
-      paid: safePaid,
-      change: safeChange,
-      balance: safeBalance,
-      paymentMode: paymentMode,
-      customerName: receiptCustomerName,
-      customerPhone: receiptCustomerPhone,
-      paymentReference: res?.paymentReference || undefined,
-    });
-
-    // Reset form
-    clearCart();
-    setCash(0);
-    setPaidAmount(0);
-    setSelectedCustomerId("");
-    setPaymentMode("cash");
-    setInvoiceDiscountPercent(0);
-    setCustomerNameInput("");
-    setCustomerPhoneInput("");
-    setSearch("");
-    setResults([]);
-    setShowResults(false);
-
-    setTimeout(() => {
-      barcodeRef.current?.focus();
-    }, 100);
-
-  } catch (error: any) {
-    const message = error?.response?.data?.message || "Checkout failed";
-    showToast(message, "error");
-  } finally {
-    setIsProcessing(false);
-  }
-};
+  };
 
   const handleAddCustomer = async () => {
     if (!newCustomerName || !newCustomerPhone) {
